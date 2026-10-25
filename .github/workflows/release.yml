@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (example: v1.0.0)'
+        description: 'Release version tag (example: v1.0.1)'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.0.1'
 
 permissions:
   contents: write
@@ -24,20 +24,10 @@ jobs:
         include:
           - os: macos-latest
             label: macOS
-            builder_args: --mac
-            artifact_glob: |
-              release/*.dmg
-              release/*.zip
-              release/*.blockmap
-              release/latest-mac.yml
+            builder_args: --mac dmg zip
           - os: windows-latest
             label: Windows
-            builder_args: --win
-            artifact_glob: |
-              release/*Setup*.exe
-              release/*Portable*.exe
-              release/*.blockmap
-              release/latest.yml
+            builder_args: --win nsis portable
 
     steps:
       - name: Checkout
@@ -55,18 +45,29 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build installer
-        run: npm run ${{ matrix.script }}
+      - name: Build app bundle
+        run: npm run build
+
+      - name: Package installer
+        run: npx electron-builder ${{ matrix.builder_args }} --publish never -c.directories.output=release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          # Helpful when diagnosing electron-builder failures in CI logs
-          DEBUG: electron-builder
+
+      - name: List packaged files
+        shell: bash
+        run: |
+          echo "=== release tree ==="
+          mkdir -p release
+          find release -type f -print | sort
+          echo "=== any installers in workspace ==="
+          find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \) -not -path './node_modules/*' | sort
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: contact-sync-${{ matrix.label }}
-          path: ${{ matrix.artifact_glob }}
+          path: |
+            release/**
           if-no-files-found: error
 
   publish:
@@ -100,7 +101,7 @@ jobs:
           path: release
 
       - name: List release files
-        run: ls -lah release
+        run: find release -type f | sort
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -109,14 +110,7 @@ jobs:
           name: Contact Sync ${{ steps.tag.outputs.name }}
           draft: false
           generate_release_notes: true
-          files: |
-            release/*.dmg
-            release/*.zip
-            release/*Setup*.exe
-            release/*Portable*.exe
-            release/*.blockmap
-            release/latest-mac.yml
-            release/latest.yml
+          files: release/**
           body: |
             ## Contact Sync ${{ steps.tag.outputs.name }}
 
@@ -124,9 +118,9 @@ jobs:
 
             | Platform | File |
             |----------|------|
-            | macOS | `.dmg` — open and drag **Contact Sync** into Applications |
-            | Windows | `*-Setup-*.exe` — installer with Start Menu shortcut |
-            | Windows | `*-Portable-*.exe` — run without installing |
+            | macOS | `ContactSync-*.dmg` — open and drag into Applications |
+            | Windows | `ContactSync-Setup-*.exe` — installer |
+            | Windows | `ContactSync-Portable-*.exe` — no install needed |
 
             ### First open on macOS
             Builds are unsigned. If Gatekeeper blocks the app: right-click → **Open**.

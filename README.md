@@ -10,26 +10,29 @@ Installers are published on **GitHub Releases**:
 
 | Platform | What to download |
 |----------|------------------|
-| **macOS** | `Contact Sync-*.dmg` — open the disk image and drag the app into **Applications** |
-| **Windows** | `Contact Sync-Setup-*.exe` — run the installer |
-| **Windows (no install)** | `Contact Sync-Portable-*.exe` — double-click to run |
+| **macOS** | `ContactSync-*.dmg` — open the disk image and drag the app into **Applications** |
+| **Windows** | `ContactSync-Setup-*.exe` — run the installer |
+| **Windows (no install)** | `ContactSync-Portable-*.exe` — double-click to run |
 
 ### First open on macOS
 Builds are unsigned. If macOS says the app can’t be opened: right-click the app → **Open** → confirm.
 
 ### Publish a new version (maintainers)
 
-GitHub Actions builds Mac + Windows and attaches them to a Release when you push a version tag:
+Pushing a version tag to GitHub triggers Actions, which builds **macOS (.dmg)** and **Windows (.exe)** and attaches them to a [GitHub Release](https://github.com/zoom2ShobhitJoshi/contact-sync/releases) so anyone can download them.
 
 ```bash
-# bump version in package.json first if needed, then:
-git add -A && git commit -m "Prepare v1.0.1"
-git tag v1.0.1
-git push origin main
-git push origin v1.0.1
+# Make sure main is on GitHub first
+git push github main
+
+# Create and push a version tag (must start with v)
+git tag v1.0.0
+git push github v1.0.0
 ```
 
-Then open [Releases](https://github.com/zoom2ShobhitJoshi/contact-sync/releases) — the workflow uploads the installers automatically.
+Watch the build: https://github.com/zoom2ShobhitJoshi/contact-sync/actions  
+
+When it finishes, downloads appear here: https://github.com/zoom2ShobhitJoshi/contact-sync/releases/latest
 
 ## Folder layout
 

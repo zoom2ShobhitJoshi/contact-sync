@@ -61,10 +61,10 @@
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "ContactSync-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "ContactSync-${version}-${arch}.${ext}",
       "sign": false,
       "contents": [
         {
