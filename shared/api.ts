@@ -19,6 +19,10 @@ export interface MediaSyncApi {
     contactName: string;
     startDateIso?: string;
   }) => Promise<void>;
+  retryFailed: (payload: {
+    contactId: string;
+    contactName: string;
+  }) => Promise<void>;
   onStatus: (cb: (status: ConnectionStatus) => void) => () => void;
   onQr: (cb: (dataUrl: string | null) => void) => () => void;
   onContacts: (cb: (contacts: ContactInfo[]) => void) => () => void;

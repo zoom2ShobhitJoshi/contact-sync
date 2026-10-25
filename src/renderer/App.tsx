@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
+import type {MediaSyncApi} from '@shared/api';
 import {filterContacts, getApi} from './api';
 import type {
   AppSettings,
@@ -6,13 +7,28 @@ import type {
   ContactInfo,
   SyncProgress,
 } from '@shared/types';
-import {defaultProgress, defaultSettings, needsStartDate} from '@shared/sync-state';
+import {
+  annotateContactsForPicker,
+  contactSyncKind,
+  findContactSyncState,
+  mergeKnownContacts,
+  selectionAfterQueryChange,
+  syncKindCounts,
+  syncKindLabel,
+} from '@shared/contact-session';
+import {defaultProgress, defaultSettings} from '@shared/sync-state';
 import logoUrl from './assets/logo.svg';
-
-const api = getApi();
-const isBrowserDemo = !window.mediaSync;
+import {DesktopOnly} from './DesktopOnly';
 
 export function App() {
+  const api = getApi();
+  if (!api) {
+    return <DesktopOnly />;
+  }
+  return <AppMain api={api} />;
+}
+
+function AppMain({api}: {api: MediaSyncApi}) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings());
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [qr, setQr] = useState<string | null>(null);
@@ -63,24 +79,55 @@ export function App() {
       alive = false;
       offs.forEach((off) => off());
     };
-  }, []);
+  }, [api]);
+
+  const knownContacts = useMemo(
+    () => mergeKnownContacts(contacts, settings.contacts),
+    [contacts, settings.contacts],
+  );
 
   useEffect(() => {
-    if (!selected && settings.lastContactId && contacts.length) {
-      const match = contacts.find((c) => c.id === settings.lastContactId);
+    if (!selected && settings.lastContactId && knownContacts.length) {
+      const match = knownContacts.find((c) => c.id === settings.lastContactId);
       if (match) {
         setSelected(match);
         setQuery(match.name);
       }
     }
-  }, [contacts, settings.lastContactId, selected]);
+  }, [knownContacts, settings.lastContactId, selected]);
 
-  const filtered = useMemo(
-    () => filterContacts(contacts, query).slice(0, 40),
-    [contacts, query],
+  const pickerContacts = useMemo(
+    () => annotateContactsForPicker(knownContacts, settings),
+    [knownContacts, settings],
   );
 
-  const firstSync = selected ? needsStartDate(settings, selected.id) : true;
+  const filtered = useMemo(
+    () =>
+      annotateContactsForPicker(
+        filterContacts(knownContacts, query).slice(0, 40),
+        settings,
+      ),
+    [knownContacts, query, settings],
+  );
+
+  const kindCounts = useMemo(
+    () => syncKindCounts(pickerContacts),
+    [pickerContacts],
+  );
+
+  const selectedKind = selected
+    ? contactSyncKind(settings, selected.id)
+    : null;
+  const selectedState = selected
+    ? findContactSyncState(settings, selected.id)
+    : undefined;
+  const firstSync = selectedKind !== 'synced';
+  const canStartSync =
+    status === 'ready' &&
+    progress.status !== 'running' &&
+    !!selected &&
+    !!settings.rootFolder &&
+    (!firstSync || !!startDate);
 
   async function pickFolder() {
     setError(null);
@@ -89,6 +136,11 @@ export function App() {
       setSettings(await api.getSettings());
     }
   }
+
+  const failures =
+    (selected && settings.contacts[selected.id]?.failures) ||
+    progress.failures ||
+    [];
 
   async function runSync() {
     setError(null);
@@ -109,6 +161,22 @@ export function App() {
         contactId: selected.id,
         contactName: selected.name,
         startDateIso: firstSync ? startDate : undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function retryFailed() {
+    setError(null);
+    if (!selected) {
+      setError('Select a contact first');
+      return;
+    }
+    try {
+      await api.retryFailed({
+        contactId: selected.id,
+        contactName: selected.name,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -177,12 +245,6 @@ export function App() {
               Connected. Choose a folder and contact, then sync.
             </p>
           )}
-          {isBrowserDemo && (
-            <p className="demo-note">
-              Browser preview mode — use the desktop app (npm run dev:electron)
-              to link a real WhatsApp account.
-            </p>
-          )}
         </section>
 
         <section className="panel">
@@ -215,6 +277,20 @@ export function App() {
             each person’s folder and history separate.
           </p>
 
+          {status === 'ready' && knownContacts.length > 0 && (
+            <div className="sync-legend" aria-live="polite">
+              <span className="sync-legend-item">
+                <span className="sync-badge synced">{syncKindLabel('synced')}</span>
+                Already set up here ({kindCounts.synced}) — resumes without a
+                start date
+              </span>
+              <span className="sync-legend-item">
+                <span className="sync-badge new">{syncKindLabel('new')}</span>
+                New to sync ({kindCounts.new}) — pick a start date first
+              </span>
+            </div>
+          )}
+
           <div className="row">
             <label className="field contact-list">
               Contact
@@ -222,35 +298,105 @@ export function App() {
                 value={query}
                 placeholder="Search by name or number"
                 onChange={(e) => {
-                  setQuery(e.target.value);
+                  const next = e.target.value;
+                  setQuery(next);
                   setOpenList(true);
-                  setSelected(null);
+                  setSelected(selectionAfterQueryChange(selected, next));
                 }}
                 onFocus={() => setOpenList(true)}
-                disabled={status !== 'ready' && !isBrowserDemo}
+                disabled={status !== 'ready'}
               />
-              {openList && filtered.length > 0 && (
+              {openList && status === 'ready' && (
                 <div className="dropdown" role="listbox">
-                  {filtered.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      aria-selected={selected?.id === c.id}
-                      onClick={() => {
-                        setSelected(c);
-                        setQuery(c.name);
-                        setOpenList(false);
-                      }}
-                    >
-                      {c.name}
-                      <span>{c.phone ?? c.id}</span>
-                    </button>
-                  ))}
+                  {filtered.length === 0 ? (
+                    <div className="dropdown-empty">
+                      No contacts match. Wait for WhatsApp to sync chats, or
+                      clear the search.
+                    </div>
+                  ) : (
+                    <>
+                      {filtered.some((c) => c.syncKind === 'synced') && (
+                        <div className="dropdown-group">Already synced</div>
+                      )}
+                      {filtered
+                        .filter((c) => c.syncKind === 'synced')
+                        .map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="dropdown-contact"
+                            aria-selected={selected?.id === c.id}
+                            onClick={() => {
+                              setSelected(c);
+                              setQuery(c.name);
+                              setOpenList(false);
+                              setStartDate('');
+                              setError(null);
+                            }}
+                          >
+                            <span className="dropdown-contact-main">
+                              <span className="dropdown-contact-name">{c.name}</span>
+                              <span className="sync-badge synced">
+                                {syncKindLabel('synced')}
+                              </span>
+                            </span>
+                            <span className="dropdown-contact-meta">
+                              {c.phone ?? c.id}
+                            </span>
+                          </button>
+                        ))}
+                      {filtered.some((c) => c.syncKind === 'new') && (
+                        <div className="dropdown-group">New to sync</div>
+                      )}
+                      {filtered
+                        .filter((c) => c.syncKind === 'new')
+                        .map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="dropdown-contact"
+                            aria-selected={selected?.id === c.id}
+                            onClick={() => {
+                              setSelected(c);
+                              setQuery(c.name);
+                              setOpenList(false);
+                              setStartDate('');
+                              setError(null);
+                            }}
+                          >
+                            <span className="dropdown-contact-main">
+                              <span className="dropdown-contact-name">{c.name}</span>
+                              <span className="sync-badge new">
+                                {syncKindLabel('new')}
+                              </span>
+                            </span>
+                            <span className="dropdown-contact-meta">
+                              {c.phone ?? c.id}
+                            </span>
+                          </button>
+                        ))}
+                    </>
+                  )}
                 </div>
               )}
             </label>
 
-            {firstSync && (
+            {selected && (
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => {
+                  setSelected(null);
+                  setQuery('');
+                  setOpenList(true);
+                  setStartDate('');
+                }}
+              >
+                Change contact
+              </button>
+            )}
+
+            {selected && firstSync && (
               <label className="field" style={{flex: '0 1 180px'}}>
                 Start from (received on/after)
                 <input
@@ -262,15 +408,31 @@ export function App() {
             )}
           </div>
 
-          {!firstSync && selected && settings.contacts[selected.id] && (
+          {status === 'ready' && knownContacts.length === 0 && (
+            <p className="banner" style={{marginTop: 12}}>
+              No chats loaded yet. Keep the app open a minute while WhatsApp
+              syncs your contact list, then search again.
+            </p>
+          )}
+
+          {selected && firstSync && (
+            <p className="banner warn">
+              <span className="sync-badge new">{syncKindLabel('new')}</span>{' '}
+              {selected.name} has not been synced on this computer yet. Choose a
+              start date above, then press Start sync.
+            </p>
+          )}
+
+          {selected && !firstSync && (
             <p className="banner">
-              Resume for {selected.name}: last sync{' '}
-              {settings.contacts[selected.id].lastSyncedAtIso
-                ? new Date(
-                    settings.contacts[selected.id].lastSyncedAtIso!,
-                  ).toLocaleString()
-                : 'not yet completed'}
-              . Only new media since then will download.
+              <span className="sync-badge synced">{syncKindLabel('synced')}</span>{' '}
+              Resume for {selected.name}
+              {selectedState?.lastSyncedAtIso
+                ? `: last sync ${new Date(
+                    selectedState.lastSyncedAtIso,
+                  ).toLocaleString()}`
+                : ''}
+              . Only new media since then will download — no start date needed.
             </p>
           )}
 
@@ -279,13 +441,29 @@ export function App() {
               className="btn btn-primary"
               type="button"
               onClick={runSync}
-              disabled={
-                progress.status === 'running' ||
-                (!isBrowserDemo && status !== 'ready')
+              disabled={!canStartSync}
+              title={
+                !selected
+                  ? 'Select a contact first'
+                  : firstSync && !startDate
+                    ? 'Pick a start date for this new contact'
+                    : !settings.rootFolder
+                      ? 'Choose a root folder first'
+                      : undefined
               }
             >
               {progress.status === 'running' ? 'Syncing…' : 'Start sync'}
             </button>
+            {failures.length > 0 && (
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={retryFailed}
+                disabled={progress.status === 'running' || status !== 'ready'}
+              >
+                Retry failed ({failures.length})
+              </button>
+            )}
             {selected && (
               <span className="path">
                 Saving to …/{selected.name}/
@@ -307,7 +485,7 @@ export function App() {
               <span>Skipped</span>
             </div>
             <div className="stat">
-              <strong>{progress.failed}</strong>
+              <strong>{Math.max(progress.failed, failures.length)}</strong>
               <span>Failed</span>
             </div>
           </div>
@@ -316,6 +494,27 @@ export function App() {
             <div className={`banner ${error || progress.status === 'error' ? 'error' : ''}`}>
               {error ?? progress.message}
               {progress.currentFile ? ` · ${progress.currentFile}` : ''}
+            </div>
+          )}
+
+          {failures.length > 0 && (
+            <div className="failure-panel">
+              <h3>Failed downloads</h3>
+              <p className="hint">
+                Each item shows why it failed. Retry only these without
+                re-scanning everything.
+              </p>
+              <ul className="failure-list">
+                {failures.map((f) => (
+                  <li key={f.messageId}>
+                    <div className="failure-file">
+                      <strong>{f.fileName}</strong>
+                      <span className="failure-kind">{f.kind}</span>
+                    </div>
+                    <div className="failure-error">{f.error}</div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </section>

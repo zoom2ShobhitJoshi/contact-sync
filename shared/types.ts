@@ -13,6 +13,14 @@ export interface ContactInfo {
   phone?: string;
 }
 
+export interface SyncFailure {
+  messageId: string;
+  fileName: string;
+  kind: MediaKind;
+  error: string;
+  failedAtIso: string;
+}
+
 export interface ContactSyncState {
   contactId: string;
   contactName: string;
@@ -20,6 +28,8 @@ export interface ContactSyncState {
   lastSyncedAtIso?: string;
   lastMessageTimestamp?: number;
   downloadedIds: string[];
+  /** Media that failed to download; kept until a retry succeeds. */
+  failures?: SyncFailure[];
 }
 
 export interface AppSettings {
@@ -39,6 +49,8 @@ export interface SyncProgress {
   currentFile?: string;
   message?: string;
   error?: string;
+  /** Per-file failures for the active contact (persisted across runs). */
+  failures?: SyncFailure[];
 }
 
 export interface MediaCandidate {

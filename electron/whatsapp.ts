@@ -10,8 +10,15 @@ import {Boom} from '@hapi/boom';
 import {useMultiFileAuthState} from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
+import {jidsMatch, normalizeJid} from '../shared/jids.js';
 import type {ContactInfo, ConnectionStatus} from '../shared/types.js';
-import {authDir} from './settings-store.js';
+import {
+  loadAllPersistedMessageChats,
+  loadPersistedContacts,
+  savePersistedContacts,
+  savePersistedMessages,
+} from './persist-store.js';
+import {authDir, loadSettings} from './settings-store.js';
 
 export type WhatsAppEvents = {
   onStatus: (status: ConnectionStatus) => void;
@@ -26,6 +33,9 @@ export class WhatsAppClient {
   private contacts = new Map<string, ContactInfo>();
   private messagesByChat = new Map<string, WAMessage[]>();
   private starting = false;
+  private persistTimer: NodeJS.Timeout | null = null;
+
+  private hydrated = false;
 
   constructor(private readonly events: WhatsAppEvents) {}
 
@@ -34,15 +44,42 @@ export class WhatsAppClient {
   }
 
   listContacts(): ContactInfo[] {
+    this.ensureHydrated();
     return [...this.contacts.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   getMessagesForContact(contactId: string): WAMessage[] {
-    return this.messagesByChat.get(contactId) ?? [];
+    this.ensureHydrated();
+    const matched: WAMessage[] = [];
+    const seen = new Set<string>();
+    for (const [jid, list] of this.messagesByChat.entries()) {
+      if (!jidsMatch(jid, contactId)) {
+        continue;
+      }
+      for (const msg of list) {
+        const id = msg.key.id ?? `${jid}-${matched.length}`;
+        if (seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        matched.push(msg);
+      }
+    }
+    return matched;
+  }
+
+  getMessage(contactId: string, messageId: string): WAMessage | undefined {
+    return this.getMessagesForContact(contactId).find((m) => m.key.id === messageId);
   }
 
   async start(): Promise<void> {
-    if (this.starting || this.sock) {
+    if (this.starting) {
+      return;
+    }
+    this.ensureHydrated();
+    if (this.sock) {
+      // Already connected — refresh contact list for the UI.
+      this.publishContacts();
       return;
     }
     this.starting = true;
@@ -63,6 +100,14 @@ export class WhatsAppClient {
         printQRInTerminal: false,
         syncFullHistory: true,
         markOnlineOnConnect: false,
+        getMessage: async (key) => {
+          const jid = key.remoteJid;
+          if (!jid || !key.id) {
+            return undefined;
+          }
+          const msg = this.getMessage(jid, key.id);
+          return msg?.message ?? undefined;
+        },
       });
       this.sock = sock;
 
@@ -83,6 +128,7 @@ export class WhatsAppClient {
           const code = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
           this.sock = null;
           this.starting = false;
+          this.flushPersist();
           if (code === DisconnectReason.loggedOut) {
             this.events.onStatus('logged_out');
             return;
@@ -137,6 +183,7 @@ export class WhatsAppClient {
           this.rememberMessage(msg);
         }
         this.publishContacts();
+        this.flushPersist();
       });
 
       sock.ev.on('messages.upsert', ({messages}) => {
@@ -144,6 +191,7 @@ export class WhatsAppClient {
           this.rememberMessage(msg);
           this.events.onMessage(msg);
         }
+        this.schedulePersist();
       });
     } catch (err) {
       this.starting = false;
@@ -181,17 +229,55 @@ export class WhatsAppClient {
     return buffer as Buffer;
   }
 
-  private upsertContact(id: string, name?: string | null): void {
+  private ensureHydrated(): void {
+    if (this.hydrated) {
+      return;
+    }
+    this.hydrated = true;
+    this.hydrateFromDisk();
+  }
+
+  private hydrateFromDisk(): void {
+    for (const contact of loadPersistedContacts()) {
+      this.upsertContact(contact.id, contact.name, false);
+    }
+    try {
+      const settings = loadSettings();
+      for (const state of Object.values(settings.contacts)) {
+        this.upsertContact(state.contactId, state.contactName, false);
+      }
+    } catch {
+      // app may not be ready yet in tests
+    }
+    for (const chat of loadAllPersistedMessageChats()) {
+      if (chat.messages.length === 0) {
+        continue;
+      }
+      this.messagesByChat.set(normalizeJid(chat.jid), chat.messages);
+      this.upsertContact(chat.jid, undefined, false);
+    }
+    this.publishContacts();
+  }
+
+  private upsertContact(
+    id: string,
+    name?: string | null,
+    persist = true,
+  ): void {
     if (!id || id === 'status@broadcast' || id.endsWith('@g.us') || id.endsWith('@newsletter')) {
       return;
     }
-    const prev = this.contacts.get(id);
+    const key = normalizeJid(id);
+    const prev = this.contacts.get(key);
     const phone = id.replace(/@.*/, '');
     const display =
       (name && name.trim()) ||
       prev?.name ||
       phone;
-    this.contacts.set(id, {id, name: display, phone});
+    this.contacts.set(key, {id: key, name: display, phone});
+    if (persist) {
+      this.schedulePersist();
+    }
   }
 
   private publishContacts(): void {
@@ -203,6 +289,24 @@ export class WhatsAppClient {
     if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast') {
       return;
     }
+    const key = normalizeJid(jid);
+    const alt = normalizeJid(
+      (msg.key as {remoteJidAlt?: string | null}).remoteJidAlt ?? undefined,
+    );
+    this.storeMessage(key, msg);
+    if (alt && alt !== key) {
+      this.storeMessage(alt, msg);
+    }
+
+    if (!msg.key.fromMe) {
+      this.upsertContact(jid, undefined);
+      if (alt) {
+        this.upsertContact(alt, undefined);
+      }
+    }
+  }
+
+  private storeMessage(jid: string, msg: WAMessage): void {
     const list = this.messagesByChat.get(jid) ?? [];
     const id = msg.key.id;
     if (id && list.some((m) => m.key.id === id)) {
@@ -210,9 +314,22 @@ export class WhatsAppClient {
     }
     list.push(msg);
     this.messagesByChat.set(jid, list);
+  }
 
-    if (!msg.key.fromMe) {
-      this.upsertContact(jid, undefined);
+  private schedulePersist(): void {
+    if (this.persistTimer) {
+      return;
+    }
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.flushPersist();
+    }, 1500);
+  }
+
+  private flushPersist(): void {
+    savePersistedContacts(this.listContacts());
+    for (const [jid, messages] of this.messagesByChat.entries()) {
+      savePersistedMessages(jid, messages);
     }
   }
 }
@@ -223,7 +340,6 @@ export function messageTimestampMs(msg: WAMessage): number {
     return 0;
   }
   const n = typeof ts === 'number' ? ts : Number(ts);
-  // WhatsApp timestamps are seconds.
   return n > 1e12 ? n : n * 1000;
 }
 
@@ -232,9 +348,6 @@ export function isFromContact(msg: WAMessage, contactId: string): boolean {
     return false;
   }
   const remote = msg.key.remoteJid;
-  if (remote === contactId) {
-    return true;
-  }
-  // Linked device participant for groups — we skip groups entirely.
-  return false;
+  const alt = (msg.key as {remoteJidAlt?: string | null}).remoteJidAlt;
+  return jidsMatch(remote, contactId) || jidsMatch(alt, contactId);
 }

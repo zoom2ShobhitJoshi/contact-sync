@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
@@ -19,14 +20,18 @@ import {WhatsAppClient} from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function appIconPath(): string {
-  // Prefer platform-native formats when present.
-  const ico = path.join(__dirname, '../../build/icons/icon.ico');
-  const png = path.join(__dirname, '../../build/icons/icon.png');
-  if (process.platform === 'win32') {
-    return ico;
-  }
-  return png;
+function appIconPath(): string | undefined {
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          path.join(__dirname, '../../build/icons/icon.ico'),
+          path.join(__dirname, '../../build/icons/icon.png'),
+        ]
+      : [
+          path.join(__dirname, '../../build/icons/icon.png'),
+          path.join(__dirname, '../../build/icons/icon-256.png'),
+        ];
+  return candidates.find((p) => fs.existsSync(p));
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -71,13 +76,14 @@ const syncEngine = new SyncEngine(
 );
 
 function createWindow(): void {
+  const icon = appIconPath();
   mainWindow = new BrowserWindow({
     width: 980,
     height: 760,
     minWidth: 720,
     minHeight: 560,
     title: 'Contact Sync',
-    icon: appIconPath(),
+    ...(icon ? {icon} : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -145,6 +151,16 @@ function registerIpc(): void {
       );
     },
   );
+
+  ipcMain.handle(
+    'sync:retry-failed',
+    async (
+      _event,
+      payload: {contactId: string; contactName: string},
+    ) => {
+      await syncEngine.retryFailed(payload.contactId, payload.contactName);
+    },
+  );
 }
 
 app.setName('Contact Sync');
@@ -153,13 +169,19 @@ if (process.platform === 'win32') {
 }
 
 app.whenReady().then(() => {
-  if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(appIconPath());
+  const dockIcon = appIconPath();
+  if (process.platform === 'darwin' && app.dock != null && dockIcon != null) {
+    try {
+      app.dock.setIcon(dockIcon);
+    } catch (err) {
+      console.warn('Could not set dock icon:', err);
+    }
   }
   settings = loadSettings();
   registerIpc();
-  createWindow();
+  // Start WhatsApp first so cached contacts/messages hydrate before the UI loads.
   void client.start();
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

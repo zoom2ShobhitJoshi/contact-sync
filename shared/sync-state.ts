@@ -1,4 +1,9 @@
-import type {AppSettings, ContactSyncState, SyncProgress} from './types.js';
+import type {
+  AppSettings,
+  ContactSyncState,
+  SyncFailure,
+  SyncProgress,
+} from './types.js';
 
 export function defaultSettings(): AppSettings {
   return {
@@ -15,6 +20,7 @@ export function defaultProgress(): SyncProgress {
     downloaded: 0,
     skipped: 0,
     failed: 0,
+    failures: [],
   };
 }
 
@@ -42,12 +48,14 @@ export function ensureContactState(
         ...existing,
         contactName,
         startDateIso: existing.startDateIso || startDateIso,
+        failures: existing.failures ?? [],
       }
     : {
         contactId,
         contactName,
         startDateIso,
         downloadedIds: [],
+        failures: [],
       };
 
   return {
@@ -71,7 +79,7 @@ export function markDownloaded(
     throw new Error(`No sync state for contact ${contactId}`);
   }
   if (existing.downloadedIds.includes(messageId)) {
-    return settings;
+    return clearFailure(settings, contactId, messageId);
   }
 
   const downloadedIds = [...existing.downloadedIds, messageId];
@@ -89,9 +97,96 @@ export function markDownloaded(
         downloadedIds,
         lastMessageTimestamp,
         lastSyncedAtIso: new Date().toISOString(),
+        failures: (existing.failures ?? []).filter((f) => f.messageId !== messageId),
       },
     },
   };
+}
+
+export function getFailures(settings: AppSettings, contactId: string): SyncFailure[] {
+  return settings.contacts[contactId]?.failures ?? [];
+}
+
+export function recordFailure(
+  settings: AppSettings,
+  contactId: string,
+  failure: SyncFailure,
+): AppSettings {
+  const existing = settings.contacts[contactId];
+  if (!existing) {
+    throw new Error(`No sync state for contact ${contactId}`);
+  }
+  const others = (existing.failures ?? []).filter((f) => f.messageId !== failure.messageId);
+  return {
+    ...settings,
+    contacts: {
+      ...settings.contacts,
+      [contactId]: {
+        ...existing,
+        failures: [...others, failure],
+      },
+    },
+  };
+}
+
+export function clearFailure(
+  settings: AppSettings,
+  contactId: string,
+  messageId: string,
+): AppSettings {
+  const existing = settings.contacts[contactId];
+  if (!existing) {
+    return settings;
+  }
+  return {
+    ...settings,
+    contacts: {
+      ...settings.contacts,
+      [contactId]: {
+        ...existing,
+        failures: (existing.failures ?? []).filter((f) => f.messageId !== messageId),
+      },
+    },
+  };
+}
+
+/** Turns raw download errors into short user-facing reasons. */
+export function explainSyncError(raw: string): string {
+  const text = raw.trim();
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes('404') ||
+    lower.includes('not found') ||
+    lower.includes('no longer available') ||
+    lower.includes('media not available') ||
+    lower.includes('gone') ||
+    lower.includes('expired') ||
+    lower.includes('enoent')
+  ) {
+    return 'Media is no longer available on WhatsApp (often too old or never opened).';
+  }
+
+  if (
+    lower.includes('econnreset') ||
+    lower.includes('etimedout') ||
+    lower.includes('timeout') ||
+    lower.includes('network') ||
+    lower.includes('socket') ||
+    lower.includes('fetch failed')
+  ) {
+    return 'Network or connection problem — try again.';
+  }
+
+  if (lower.includes('enospc') || lower.includes('no space')) {
+    return 'Not enough disk space to save this file.';
+  }
+
+  if (lower.includes('eacces') || lower.includes('permission')) {
+    return 'Permission denied writing to the sync folder.';
+  }
+
+  return text || 'Unknown download error';
 }
 
 export function wasDownloaded(

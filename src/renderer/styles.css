@@ -271,7 +271,8 @@ select:focus {
   background: rgba(8, 18, 14, 0.95);
 }
 
-.dropdown button {
+.dropdown button,
+.dropdown-contact {
   width: 100%;
   text-align: left;
   border: 0;
@@ -284,14 +285,91 @@ select:focus {
 }
 
 .dropdown button:hover,
-.dropdown button[aria-selected='true'] {
+.dropdown button[aria-selected='true'],
+.dropdown-contact:hover,
+.dropdown-contact[aria-selected='true'] {
   background: rgba(47, 107, 79, 0.35);
 }
 
-.dropdown button span {
+.dropdown-contact-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dropdown-contact-name {
+  font-weight: 500;
+}
+
+.dropdown-contact-meta {
   display: block;
+  margin-top: 2px;
   color: rgba(215, 235, 225, 0.55);
   font-size: 0.8rem;
+}
+
+.dropdown-group {
+  padding: 8px 12px 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(215, 235, 225, 0.5);
+  border-bottom: 1px solid rgba(215, 235, 225, 0.08);
+}
+
+.dropdown-empty {
+  padding: 12px;
+  color: rgba(215, 235, 225, 0.65);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.sync-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sync-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: rgba(215, 235, 225, 0.78);
+}
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.sync-badge.synced {
+  color: #0c1a14;
+  background: var(--ok);
+}
+
+.sync-badge.new {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.banner.warn {
+  background: rgba(240, 198, 116, 0.1);
+  border-color: rgba(240, 198, 116, 0.35);
 }
 
 .btn {
@@ -384,6 +462,62 @@ select:focus {
   margin-top: 10px;
   font-size: 0.8rem;
   color: rgba(215, 235, 225, 0.55);
+}
+
+.failure-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.failure-panel h3 {
+  margin: 0 0 4px;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
+}
+
+.failure-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.failure-list li {
+  border: 1px solid rgba(239, 138, 122, 0.28);
+  background: rgba(239, 138, 122, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.failure-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.failure-file strong {
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.failure-kind {
+  font-size: 0.75rem;
+  color: rgba(215, 235, 225, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.failure-error {
+  font-size: 0.86rem;
+  color: #f0c4bc;
+  line-height: 1.35;
 }
 
 @media (max-width: 720px) {
