@@ -31,25 +31,27 @@ Original WhatsApp file names are kept. Already-downloaded messages are skipped.
 
 > This uses an unofficial WhatsApp Web library ([Baileys](https://github.com/WhiskeySockets/Baileys)). Meta may restrict or ban accounts that use linked unofficial clients. Use at your own risk.
 
-## Run locally
+## Run the desktop app
+
+This is an **Electron desktop application** for Windows and macOS — not a website.
 
 ```bash
 npm install
 npm run dev:electron
 ```
 
-- UI only (browser preview / demo data): `npm run dev` → http://127.0.0.1:3847
-- Unit tests: `npm test`
-- Production build: `npm run build` then `npm start`
+That opens the Shelf window. Scan the QR with WhatsApp on your phone, then choose a folder and contact.
 
-## Scripts
+- Unit tests: `npm test`
+- Packaged run after build: `npm run build` then `npm start`
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Vite UI on port **3847** (demo API in the browser) |
-| `npm run dev:electron` | Electron + Vite with real WhatsApp linking |
+| `npm run dev:electron` | **Desktop app** (Electron window + real WhatsApp linking) |
 | `npm test` | Vitest unit tests |
 | `npm run build` | Build renderer + Electron main |
+
+`npm run dev` starts only the UI toolkit used inside Electron; it is not how you use Shelf day to day.
 
 ## Notes
 
