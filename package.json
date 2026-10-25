@@ -1,7 +1,7 @@
 {
   "name": "contact-sync",
   "productName": "Contact Sync",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Sync photos, videos, documents, and audio from a WhatsApp contact to local folders",
   "author": "Contact Sync",
   "license": "MIT",
@@ -102,10 +102,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Contact Sync",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "ContactSync-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "${productName}-Portable-${version}.${ext}"
+      "artifactName": "ContactSync-Portable-${version}.${ext}"
     },
     "linux": {
       "icon": "build/icons",

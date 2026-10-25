@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (example: v1.0.1)'
+        description: 'Release version tag (example: v1.0.2)'
         required: true
-        default: 'v1.0.1'
+        default: 'v1.0.2'
 
 permissions:
   contents: write
@@ -24,10 +24,10 @@ jobs:
         include:
           - os: macos-latest
             label: macOS
-            builder_args: --mac dmg zip
+            eb_args: --mac
           - os: windows-latest
             label: Windows
-            builder_args: --win nsis portable
+            eb_args: --win
 
     steps:
       - name: Checkout
@@ -49,18 +49,30 @@ jobs:
         run: npm run build
 
       - name: Package installer
-        run: npx electron-builder ${{ matrix.builder_args }} --publish never -c.directories.output=release
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx electron-builder ${{ matrix.eb_args }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: List packaged files
+        if: always()
         shell: bash
         run: |
-          echo "=== release tree ==="
-          mkdir -p release
-          find release -type f -print | sort
-          echo "=== any installers in workspace ==="
-          find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \) -not -path './node_modules/*' | sort
+          echo "=== release/ ==="
+          if [ -d release ]; then
+            find release -type f | sort
+          else
+            echo "release/ directory does not exist"
+          fi
+          echo "=== dist/ (fallback) ==="
+          if [ -d dist ]; then
+            find dist -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.yml' -o -name '*.blockmap' \) | sort || true
+          fi
+          echo "=== workspace installers ==="
+          find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name 'latest*.yml' -o -name '*.blockmap' \) \
+            -not -path './node_modules/*' -not -path './.git/*' | sort || true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
