@@ -80,16 +80,11 @@
       ]
     },
     "win": {
-      "icon": "build/icons/icon.ico",
+      "icon": "build/icons/icon-256.png",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
           "arch": [
             "x64"
           ]
@@ -103,9 +98,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Contact Sync",
       "artifactName": "ContactSync-Setup-${version}.${ext}"
-    },
-    "portable": {
-      "artifactName": "ContactSync-Portable-${version}.${ext}"
     },
     "linux": {
       "icon": "build/icons",
