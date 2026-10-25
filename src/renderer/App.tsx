@@ -7,6 +7,7 @@ import type {
   SyncProgress,
 } from '@shared/types';
 import {defaultProgress, defaultSettings, needsStartDate} from '@shared/sync-state';
+import logoUrl from './assets/logo.svg';
 
 const api = getApi();
 const isBrowserDemo = !window.mediaSync;
@@ -117,7 +118,16 @@ export function App() {
   return (
     <div className="app">
       <header className="brand">
-        <div className="brand-mark">Shelf</div>
+        <div className="brand-row">
+          <img
+            className="brand-logo"
+            src={logoUrl}
+            width={56}
+            height={56}
+            alt="Contact Sync"
+          />
+          <div className="brand-mark">Contact Sync</div>
+        </div>
         <p>
           Pull photos, videos, documents, and voice notes from one WhatsApp
           contact into local folders — resume where you left off every time you

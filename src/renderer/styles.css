@@ -99,6 +99,21 @@ body::before {
   margin-bottom: 28px;
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  animation: rise 0.8s ease-out both;
+}
+
 .brand-mark {
   font-family: 'Syne', sans-serif;
   font-weight: 800;

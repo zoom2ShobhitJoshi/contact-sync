@@ -19,6 +19,16 @@ import {WhatsAppClient} from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function appIconPath(): string {
+  // Prefer platform-native formats when present.
+  const ico = path.join(__dirname, '../../build/icons/icon.ico');
+  const png = path.join(__dirname, '../../build/icons/icon.png');
+  if (process.platform === 'win32') {
+    return ico;
+  }
+  return png;
+}
+
 let mainWindow: BrowserWindow | null = null;
 let status: ConnectionStatus = 'disconnected';
 let qrDataUrl: string | null = null;
@@ -66,7 +76,8 @@ function createWindow(): void {
     height: 760,
     minWidth: 720,
     minHeight: 560,
-    title: 'WhatsApp Media Sync',
+    title: 'Contact Sync',
+    icon: appIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -136,7 +147,15 @@ function registerIpc(): void {
   );
 }
 
+app.setName('Contact Sync');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.contactsync.app');
+}
+
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(appIconPath());
+  }
   settings = loadSettings();
   registerIpc();
   createWindow();

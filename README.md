@@ -1,4 +1,4 @@
-# Shelf — WhatsApp Media Sync
+# Contact Sync
 
 Desktop app (Windows & macOS) that downloads media **received from one WhatsApp contact** into local folders. Sync runs when you open the app and resumes from the last successful run per contact.
 
@@ -40,7 +40,9 @@ npm install
 npm run dev:electron
 ```
 
-That opens the Shelf window. Scan the QR with WhatsApp on your phone, then choose a folder and contact.
+That opens the **Contact Sync** window (custom logo + name in the menu bar / taskbar). Scan the QR with WhatsApp on your phone, then choose a folder and contact.
+
+App icons live in `build/icons/` (`icon.png`, `icon.ico`, `icon.svg`).
 
 - Unit tests: `npm test`
 - Packaged run after build: `npm run build` then `npm start`
@@ -51,7 +53,7 @@ That opens the Shelf window. Scan the QR with WhatsApp on your phone, then choos
 | `npm test` | Vitest unit tests |
 | `npm run build` | Build renderer + Electron main |
 
-`npm run dev` starts only the UI toolkit used inside Electron; it is not how you use Shelf day to day.
+`npm run dev` starts only the UI toolkit used inside Electron; it is not how you use Contact Sync day to day.
 
 ## Notes
 

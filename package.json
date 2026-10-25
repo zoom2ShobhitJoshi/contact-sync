@@ -1,9 +1,26 @@
 {
-  "name": "whatsapp-media-sync",
+  "name": "contact-sync",
+  "productName": "Contact Sync",
   "version": "1.0.0",
   "description": "Sync photos, videos, documents, and audio from a WhatsApp contact to local folders",
   "main": "dist-electron/electron/main.js",
   "type": "module",
+  "build": {
+    "appId": "com.contactsync.app",
+    "productName": "Contact Sync",
+    "directories": {
+      "buildResources": "build/icons"
+    },
+    "linux": {
+      "icon": "build/icons"
+    },
+    "win": {
+      "icon": "build/icons/icon.ico"
+    },
+    "mac": {
+      "icon": "build/icons/icon.png"
+    }
+  },
   "scripts": {
     "dev": "vite --port 3847 --host 127.0.0.1",
     "dev:electron": "npm run build:electron && concurrently -k \"vite --port 3847 --host 127.0.0.1\" \"npm run electron:wait\"",
