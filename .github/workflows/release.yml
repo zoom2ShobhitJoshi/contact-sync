@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS
+            script: dist:mac
+            artifact_glob: |
+              release/*.dmg
+              release/*.zip
+              release/*.blockmap
+              release/latest-mac.yml
+          - os: windows-latest
+            label: Windows
+            script: dist:win
+            artifact_glob: |
+              release/*Setup*.exe
+              release/*portable*.exe
+              release/*.blockmap
+              release/latest.yml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build installer
+        run: npm run ${{ matrix.script }}
+        env:
+          # Unsigned local distribution builds are fine for GitHub Releases.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: contact-sync-${{ matrix.label }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contact-sync-macOS
+          path: release
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contact-sync-Windows
+          path: release
+
+      - name: List release files
+        run: ls -lah release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            release/*.dmg
+            release/*.zip
+            release/*Setup*.exe
+            release/*portable*.exe
+            release/*.blockmap
+            release/latest-mac.yml
+            release/latest.yml
+          body: |
+            ## Contact Sync ${{ github.ref_name }}
+
+            Desktop installers for **macOS** and **Windows**.
+
+            | Platform | File |
+            |----------|------|
+            | macOS | `.dmg` — open and drag **Contact Sync** into Applications |
+            | Windows | `Setup.exe` — installer with Start Menu shortcut |
+            | Windows | `portable.exe` — run without installing |
+
+            ### First open on macOS
+            Builds are unsigned. If Gatekeeper blocks the app: right-click → **Open**.
+
+            ### WhatsApp note
+            This app uses an unofficial WhatsApp Web link (QR). Use at your own risk.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
