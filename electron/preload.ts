@@ -17,6 +17,7 @@ const api: MediaSyncApi = {
   startWhatsApp: () => ipcRenderer.invoke('wa:start'),
   logout: () => ipcRenderer.invoke('wa:logout'),
   syncContact: (payload) => ipcRenderer.invoke('sync:start', payload),
+  retryFailed: (payload) => ipcRenderer.invoke('sync:retry-failed', payload),
   onStatus: (cb) => subscribe('wa:status', cb),
   onQr: (cb) => subscribe('wa:qr', cb),
   onContacts: (cb) => subscribe('wa:contacts', cb),
