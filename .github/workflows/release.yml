@@ -108,9 +108,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t FILES < <(find release -type f ! -name '*.blockmap' ! -name 'builder-debug.yml' | sort)
+          # Only ship installers — never unpacked Electron trees (.pak, .asar, etc.)
+          mapfile -t FILES < <(
+            find release -type f \( \
+              -name 'ContactSync-*.dmg' -o \
+              -name 'ContactSync-*.zip' -o \
+              -name 'ContactSync-Setup-*.exe' \
+            \) | sort
+          )
+          echo "Installer files to publish:"
+          printf '  %s\n' "${FILES[@]}"
           if [ ${#FILES[@]} -eq 0 ]; then
-            echo "No release files found"
+            echo "No installer files found"
+            find release -type f | sort || true
             exit 1
           fi
 
@@ -129,7 +139,8 @@ jobs:
           EOF
           )
 
-          for attempt in 1 2 3 4 5; do
+          # Fewer, longer waits — secondary rate limits need cooldown, not spam.
+          for attempt in 1 2 3; do
             echo "Publish attempt ${attempt}..."
             if gh release view "$TAG" >/dev/null 2>&1; then
               echo "Release ${TAG} already exists — uploading assets"
@@ -145,9 +156,15 @@ jobs:
                 exit 0
               fi
             fi
-            echo "Rate limited or transient error — sleeping before retry"
-            sleep $((attempt * 45))
+            if [ "$attempt" -lt 3 ]; then
+              wait_s=$((attempt * 120))
+              echo "Rate limited or transient error — sleeping ${wait_s}s before retry"
+              sleep "$wait_s"
+            fi
           done
 
           echo "Failed to publish release after retries"
+          echo "Builds succeeded — download Artifacts from the Actions run and publish manually:"
+          echo "  gh run download <run-id> -R zoom2ShobhitJoshi/contact-sync"
+          echo "  gh release create ${TAG} <dmg> <exe> --title \"Contact Sync ${TAG}\""
           exit 1
